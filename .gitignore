@@ -8,3 +8,9 @@ coverage/
 .env*
 !.env.example
 .env
+
+# Android & Capacitor build artifacts
+android/app/build/
+android/.gradle/
+android/local.properties
+*.apk
