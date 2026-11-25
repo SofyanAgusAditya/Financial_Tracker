@@ -141,13 +141,19 @@ export function updateDocumentMetadata(tabId: string, customMeta?: Partial<TabSe
  * Custom React Hook to keep document head metadata synchronized with the active tab
  */
 import { useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 export function useTabSeo(activeTab: string): void {
   useEffect(() => {
     updateDocumentMetadata(activeTab);
 
-    // Synchronize URL query parameter without triggering full page reload
-    if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+    // Synchronize URL query parameter without triggering full page reload (non-native browsers only)
+    if (
+      !Capacitor.isNativePlatform() &&
+      typeof window !== 'undefined' &&
+      window.history &&
+      window.history.replaceState
+    ) {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== activeTab) {
         url.searchParams.set('tab', activeTab);

@@ -47,6 +47,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isPromptingBiometric, setIsPromptingBiometric] = useState<boolean>(false);
+  const [isUnlocking, setIsUnlocking] = useState<boolean>(false);
   const [biometricInfo, setBiometricInfo] = useState<BiometricSupportInfo>({
     isAvailable: false,
     isNative: false,
@@ -58,17 +59,47 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [biometricConfigured] = useState<boolean>(() => isBiometricEnabled());
 
   const autoPromptTriggeredRef = useRef<boolean>(false);
+  const unlockedRef = useRef<boolean>(false);
+  const unlockTimerRef = useRef<number | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+
+  const isInputLocked = isSubmitting || isPromptingBiometric || isUnlocking;
+
+  useEffect(() => {
+    return () => {
+      if (unlockTimerRef.current !== null) {
+        window.clearTimeout(unlockTimerRef.current);
+        unlockTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const triggerUnlockSuccess = useCallback(() => {
+    if (unlockedRef.current) return;
+    unlockedRef.current = true;
+    setIsUnlocking(true);
+    setErrorMessage(null);
+    if (unlockTimerRef.current !== null) {
+      window.clearTimeout(unlockTimerRef.current);
+    }
+    unlockTimerRef.current = window.setTimeout(() => {
+      unlockTimerRef.current = null;
+      onSuccessRef.current();
+    }, 150);
+  }, []);
+
   const biometricLabel = translateBiometryLabel(biometricInfo.label, lang);
 
   const handleBiometricAuth = useCallback(async () => {
-    if (isPromptingBiometric || isSubmitting) return;
+    if (isPromptingBiometric || isSubmitting || isUnlocking) return;
     setIsPromptingBiometric(true);
     setErrorMessage(null);
 
     try {
       const result = await authenticateWithBiometric(t.lockScreen.biometricReason);
       if (result.success) {
-        onSuccess();
+        triggerUnlockSuccess();
         return;
       }
       if (!result.cancelled && result.error) {
@@ -77,15 +108,25 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     } finally {
       setIsPromptingBiometric(false);
     }
-  }, [isPromptingBiometric, isSubmitting, onSuccess, t.lockScreen.biometricReason, lang]);
+  }, [isPromptingBiometric, isSubmitting, isUnlocking, triggerUnlockSuccess, t.lockScreen.biometricReason, lang]);
+
+  const handleBiometricAuthRef = useRef(handleBiometricAuth);
+  handleBiometricAuthRef.current = handleBiometricAuth;
 
   useEffect(() => {
     let cancelled = false;
+    unlockedRef.current = false;
+    autoPromptTriggeredRef.current = false;
+    if (unlockTimerRef.current !== null) {
+      window.clearTimeout(unlockTimerRef.current);
+      unlockTimerRef.current = null;
+    }
     setStep('create');
     setFirstPin('');
     setPinInput('');
     setErrorMessage(null);
     setIsSubmitting(false);
+    setIsUnlocking(false);
 
     checkBiometricSupport().then((info) => {
       if (cancelled) return;
@@ -98,14 +139,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         !autoPromptTriggeredRef.current
       ) {
         autoPromptTriggeredRef.current = true;
-        void handleBiometricAuth();
+        void handleBiometricAuthRef.current();
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [mode, isChangePin, handleBiometricAuth]);
+  }, [mode, isChangePin]);
 
   const submitCompletePin = useCallback(
     async (completedPin: string) => {
@@ -130,7 +171,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             completedPin,
             biometricInfo.isAvailable ? biometricChoice : false
           );
-          onSuccess();
+          triggerUnlockSuccess();
         } catch {
           setErrorMessage(t.lockScreen.savePinError);
           setPinInput('');
@@ -144,7 +185,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       try {
         const valid = await verifyPin(completedPin);
         if (valid) {
-          onSuccess();
+          triggerUnlockSuccess();
         } else {
           setErrorMessage(t.lockScreen.wrongPinError);
           setPinInput('');
@@ -156,12 +197,12 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         setIsSubmitting(false);
       }
     },
-    [mode, step, firstPin, biometricInfo.isAvailable, biometricChoice, onSuccess, t.lockScreen]
+    [mode, step, firstPin, biometricInfo.isAvailable, biometricChoice, triggerUnlockSuccess, t.lockScreen]
   );
 
   const appendDigit = useCallback(
     (digit: string) => {
-      if (isSubmitting || isPromptingBiometric || pinInput.length >= PIN_LENGTH) return;
+      if (isInputLocked || pinInput.length >= PIN_LENGTH) return;
       const next = `${pinInput}${digit}`;
       setPinInput(next);
       setErrorMessage(null);
@@ -170,14 +211,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         void submitCompletePin(next);
       }
     },
-    [isSubmitting, isPromptingBiometric, pinInput, submitCompletePin]
+    [isInputLocked, pinInput, submitCompletePin]
   );
 
   const removeLastDigit = useCallback(() => {
-    if (isSubmitting || isPromptingBiometric || pinInput.length === 0) return;
+    if (isInputLocked || pinInput.length === 0) return;
     setPinInput((prev) => prev.slice(0, -1));
     setErrorMessage(null);
-  }, [isSubmitting, isPromptingBiometric, pinInput.length]);
+  }, [isInputLocked, pinInput.length]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -187,7 +228,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       } else if (event.key === 'Backspace') {
         event.preventDefault();
         removeLastDigit();
-      } else if (event.key === 'Escape' && onCancel) {
+      } else if (event.key === 'Escape' && onCancel && !isInputLocked) {
         event.preventDefault();
         onCancel();
       }
@@ -195,7 +236,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [appendDigit, removeLastDigit, onCancel]);
+  }, [appendDigit, removeLastDigit, onCancel, isInputLocked]);
 
   const title =
     mode === 'setup'
@@ -219,7 +260,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     mode === 'unlock' && biometricConfigured && biometricInfo.isAvailable;
 
   return (
-    <div className="min-h-[100dvh] w-full bg-[#FBF8F2] dark:bg-[#121019] text-[#181522] dark:text-[#F5F3FA] flex flex-col items-center justify-between px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] select-none">
+    <div className="min-h-[100dvh] w-full overflow-y-auto overflow-x-hidden bg-[#FBF8F2] dark:bg-[#121019] text-[#181522] dark:text-[#F5F3FA] flex flex-col items-center justify-between px-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] select-none touch-manipulation">
       {/* Top Bar */}
       <div className="w-full max-w-[360px] flex items-center justify-between min-h-[44px]">
         <div className="flex items-center gap-2 min-w-0">
@@ -234,8 +275,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         {onCancel && (
           <button
             type="button"
-            onClick={onCancel}
-            className="min-h-[44px] px-3 text-xs font-semibold text-[#706B82] dark:text-[#9D98AC] hover:text-[#16151D] dark:hover:text-white rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+            disabled={isInputLocked}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancel();
+            }}
+            className="min-h-[44px] px-3 text-xs font-semibold text-[#706B82] dark:text-[#9D98AC] hover:text-[#16151D] dark:hover:text-white rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer touch-manipulation select-none disabled:opacity-50"
           >
             {t.common.cancel}
           </button>
@@ -243,8 +289,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       </div>
 
       {/* Center Header & PIN Dots */}
-      <div className="w-full max-w-[360px] flex flex-col items-center text-center my-auto py-3">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#704BEA] to-[#8A66F5] text-white flex items-center justify-center shadow-md mb-4">
+      <div className="w-full max-w-[360px] flex flex-col items-center text-center my-auto py-2 sm:py-3">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-[#704BEA] to-[#8A66F5] text-white flex items-center justify-center shadow-md mb-3 sm:mb-4">
           {mode === 'setup' ? (
             <ShieldCheck className="w-6 h-6" />
           ) : (
@@ -261,11 +307,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
         {/* 6-Digit PIN Indicators */}
         <div
-          className="flex items-center justify-center gap-3.5 my-5"
-          aria-label={t.lockScreen.pinProgressAria(pinInput.length, PIN_LENGTH)}
+          className="flex items-center justify-center gap-3 sm:gap-3.5 my-4 sm:my-5"
+          aria-label={t.lockScreen.pinProgressAria(
+            isUnlocking ? PIN_LENGTH : pinInput.length,
+            PIN_LENGTH
+          )}
         >
           {Array.from({ length: PIN_LENGTH }, (_, idx) => {
-            const filled = idx < pinInput.length;
+            const filled = isUnlocking || idx < pinInput.length;
             return (
               <span
                 key={idx}
@@ -338,12 +387,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         {showUnlockBiometric && (
           <button
             type="button"
-            disabled={isPromptingBiometric || isSubmitting}
-            onClick={() => void handleBiometricAuth()}
-            className="mt-2 min-h-[44px] px-4 py-2 text-xs font-bold text-[#704BEA] dark:text-[#B8B2FF] bg-[#704BEA]/10 dark:bg-[#B8B2FF]/15 hover:bg-[#704BEA]/15 dark:hover:bg-[#B8B2FF]/20 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            disabled={isInputLocked}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void handleBiometricAuth();
+            }}
+            className="mt-2 max-w-full min-h-[44px] px-4 py-2 text-xs font-bold text-[#704BEA] dark:text-[#B8B2FF] bg-[#704BEA]/10 dark:bg-[#B8B2FF]/15 hover:bg-[#704BEA]/15 dark:hover:bg-[#B8B2FF]/20 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer touch-manipulation select-none disabled:opacity-50"
           >
             <Fingerprint className="w-4 h-4 shrink-0" />
-            <span>
+            <span className="truncate">
               {isPromptingBiometric
                 ? t.lockScreen.waitingVerification
                 : t.lockScreen.unlockWithBiometric(biometricLabel)}
@@ -353,15 +406,19 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       </div>
 
       {/* Large Touch-Friendly Numeric Keypad */}
-      <div className="w-full max-w-[320px] pb-1">
-        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+      <div className="w-full max-w-[300px] sm:max-w-[320px] pb-1">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {KEYPAD_DIGITS.map((digit) => (
             <button
               key={digit}
               type="button"
-              disabled={isSubmitting || isPromptingBiometric}
-              onClick={() => appendDigit(digit)}
-              className="min-h-[56px] rounded-2xl text-xl font-bold tabular-nums text-[#16151D] dark:text-white bg-white dark:bg-[#181720] border border-[#EAE5DC] dark:border-[#262432] shadow-xs hover:bg-[#FAF7F2] dark:hover:bg-[#22202E] active:scale-95 active:bg-[#F1ECE3] dark:active:bg-[#252230] transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+              disabled={isInputLocked}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                appendDigit(digit);
+              }}
+              className="min-h-[48px] h-[52px] sm:min-h-[56px] sm:h-[56px] rounded-2xl text-xl font-bold tabular-nums text-[#16151D] dark:text-white bg-white dark:bg-[#181720] border border-[#EAE5DC] dark:border-[#262432] shadow-xs hover:bg-[#FAF7F2] dark:hover:bg-[#22202E] active:scale-95 active:bg-[#F1ECE3] dark:active:bg-[#252230] transition-all flex items-center justify-center cursor-pointer touch-manipulation select-none disabled:opacity-50"
             >
               {digit}
             </button>
@@ -371,37 +428,47 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           {showUnlockBiometric ? (
             <button
               type="button"
-              disabled={isSubmitting || isPromptingBiometric}
-              onClick={() => void handleBiometricAuth()}
+              disabled={isInputLocked}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleBiometricAuth();
+              }}
               aria-label={t.lockScreen.unlockWithBiometric(biometricLabel)}
-              className="min-h-[56px] rounded-2xl bg-white dark:bg-[#181720] border border-[#EAE5DC] dark:border-[#262432] shadow-xs hover:bg-[#FAF7F2] dark:hover:bg-[#22202E] active:scale-95 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+              className="min-h-[48px] h-[52px] sm:min-h-[56px] sm:h-[56px] rounded-2xl bg-white dark:bg-[#181720] border border-[#EAE5DC] dark:border-[#262432] shadow-xs hover:bg-[#FAF7F2] dark:hover:bg-[#22202E] active:scale-95 transition-all flex items-center justify-center cursor-pointer touch-manipulation select-none disabled:opacity-50"
             >
               <Fingerprint className="w-6 h-6 text-[#704BEA] dark:text-[#B8B2FF]" />
             </button>
           ) : mode === 'setup' && step === 'confirm' ? (
             <button
               type="button"
-              disabled={isSubmitting}
-              onClick={() => {
+              disabled={isInputLocked}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setStep('create');
                 setFirstPin('');
                 setPinInput('');
                 setErrorMessage(null);
               }}
-              className="min-h-[56px] rounded-2xl text-xs font-semibold text-[#706B82] dark:text-[#9D98AC] hover:bg-black/5 dark:hover:bg-white/5 active:scale-95 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+              className="min-h-[48px] h-[52px] sm:min-h-[56px] sm:h-[56px] rounded-2xl text-xs font-semibold text-[#706B82] dark:text-[#9D98AC] hover:bg-black/5 dark:hover:bg-white/5 active:scale-95 transition-all flex items-center justify-center cursor-pointer touch-manipulation select-none disabled:opacity-50"
             >
               {t.lockScreen.repeat}
             </button>
           ) : (
-            <div aria-hidden="true" className="min-h-[56px]" />
+            <div aria-hidden="true" className="min-h-[48px] h-[52px] sm:min-h-[56px] sm:h-[56px]" />
           )}
 
           {/* Digit 0 */}
           <button
             type="button"
-            disabled={isSubmitting || isPromptingBiometric}
-            onClick={() => appendDigit('0')}
-            className="min-h-[56px] rounded-2xl text-xl font-bold tabular-nums text-[#16151D] dark:text-white bg-white dark:bg-[#181720] border border-[#EAE5DC] dark:border-[#262432] shadow-xs hover:bg-[#FAF7F2] dark:hover:bg-[#22202E] active:scale-95 active:bg-[#F1ECE3] dark:active:bg-[#252230] transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+            disabled={isInputLocked}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              appendDigit('0');
+            }}
+            className="min-h-[48px] h-[52px] sm:min-h-[56px] sm:h-[56px] rounded-2xl text-xl font-bold tabular-nums text-[#16151D] dark:text-white bg-white dark:bg-[#181720] border border-[#EAE5DC] dark:border-[#262432] shadow-xs hover:bg-[#FAF7F2] dark:hover:bg-[#22202E] active:scale-95 active:bg-[#F1ECE3] dark:active:bg-[#252230] transition-all flex items-center justify-center cursor-pointer touch-manipulation select-none disabled:opacity-50"
           >
             0
           </button>
@@ -409,10 +476,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           {/* Delete Digit */}
           <button
             type="button"
-            disabled={pinInput.length === 0 || isSubmitting || isPromptingBiometric}
-            onClick={removeLastDigit}
+            disabled={pinInput.length === 0 || isInputLocked}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              removeLastDigit();
+            }}
             aria-label={t.lockScreen.deleteDigitAria}
-            className="min-h-[56px] rounded-2xl text-[#706B82] dark:text-[#9D98AC] bg-white/70 dark:bg-[#181720]/70 border border-[#EAE5DC] dark:border-[#262432] hover:text-[#16151D] dark:hover:text-white active:scale-95 transition-all flex items-center justify-center cursor-pointer disabled:opacity-40"
+            className="min-h-[48px] h-[52px] sm:min-h-[56px] sm:h-[56px] rounded-2xl text-[#706B82] dark:text-[#9D98AC] bg-white/70 dark:bg-[#181720]/70 border border-[#EAE5DC] dark:border-[#262432] hover:text-[#16151D] dark:hover:text-white active:scale-95 transition-all flex items-center justify-center cursor-pointer touch-manipulation select-none disabled:opacity-40"
           >
             <Delete className="w-5 h-5" />
           </button>

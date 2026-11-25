@@ -15,6 +15,7 @@ import {
   RecurringTransaction,
   Transaction,
 } from '../types';
+import { convertCurrency } from '../data/mockData';
 import { toDateOnlyString } from './finance';
 
 export interface AppStateSnapshot {
@@ -377,19 +378,91 @@ function isShareCancelledError(error: unknown): boolean {
   return /cancel|dismiss|abort/i.test(message);
 }
 
-/** Exports a dated JSON backup file via native Android Share or browser download. */
-export async function exportBackupJson(
-  snapshot: AppStateSnapshot,
-  options?: ExportBackupOptions
-): Promise<ExportBackupResult> {
-  const payload = createBackupPayload(snapshot);
-  const jsonText = JSON.stringify(payload, null, 2);
-  const fileName = `financial-tracker-backup-${toDateOnlyString(new Date())}.json`;
+export interface ExportCsvOptions {
+  headers?: string[];
+  typeLabels?: { INCOME: string; EXPENSE: string };
+  resolveCategoryName?: (category: Category | undefined) => string;
+  title?: string;
+  dialogTitle?: string;
+}
 
+function escapeCsvCell(value: string | number): string {
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  const normalized = value.replace(/\r?\n/g, ' ').replace(/"/g, '""');
+  return `"${normalized}"`;
+}
+
+/** Builds a UTF-8 BOM CSV string summarizing all cash book transactions in IDR. */
+export function buildCashBookCsvContent(
+  transactions: Transaction[],
+  categories: Category[],
+  options?: ExportCsvOptions
+): string {
+  const headers = options?.headers ?? [
+    'Tanggal',
+    'Tipe',
+    'Kategori',
+    'Deskripsi',
+    'Nominal IDR',
+    'Tag',
+    'Catatan',
+  ];
+  const categoryMap = new Map(categories.map((c) => [c.id, c]));
+
+  const sorted = [...transactions].sort((a, b) => {
+    const timeA = new Date(a.transactionDate).getTime();
+    const timeB = new Date(b.transactionDate).getTime();
+    return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
+  });
+
+  const rows = sorted.map((tx) => {
+    const parsedDate = new Date(tx.transactionDate);
+    const dateStr = Number.isNaN(parsedDate.getTime())
+      ? tx.transactionDate.slice(0, 10)
+      : toDateOnlyString(parsedDate);
+    const typeLabel =
+      options?.typeLabels?.[tx.type] ??
+      (tx.type === 'INCOME' ? 'Pemasukan' : 'Pengeluaran');
+    const category = tx.categoryId ? categoryMap.get(tx.categoryId) : undefined;
+    const categoryLabel =
+      options?.resolveCategoryName?.(category) ?? category?.name ?? '';
+    const amountIdr = Math.round(convertCurrency(tx.amount, tx.currency, 'IDR'));
+    const tags = tx.tags.join('; ');
+    const notes = tx.notes ?? '';
+
+    return [
+      escapeCsvCell(dateStr),
+      escapeCsvCell(typeLabel),
+      escapeCsvCell(categoryLabel),
+      escapeCsvCell(tx.description),
+      escapeCsvCell(amountIdr),
+      escapeCsvCell(tags),
+      escapeCsvCell(notes),
+    ].join(',');
+  });
+
+  return `\uFEFF${[headers.map((h) => escapeCsvCell(h)).join(','), ...rows].join('\r\n')}`;
+}
+
+async function shareOrDownloadTextFile({
+  fileName,
+  content,
+  mimeType,
+  title,
+  dialogTitle,
+}: {
+  fileName: string;
+  content: string;
+  mimeType: string;
+  title: string;
+  dialogTitle: string;
+}): Promise<ExportBackupResult> {
   if (Capacitor.isNativePlatform()) {
     await Filesystem.writeFile({
       path: fileName,
-      data: jsonText,
+      data: content,
       directory: Directory.Cache,
       encoding: Encoding.UTF8,
     });
@@ -402,8 +475,8 @@ export async function exportBackupJson(
     try {
       await Share.share({
         url: uriResult.uri,
-        title: options?.title ?? 'Financial Tracker Backup',
-        dialogTitle: options?.dialogTitle ?? 'Simpan atau Bagikan Backup JSON',
+        title,
+        dialogTitle,
       });
       return { status: 'shared', fileName };
     } catch (error) {
@@ -418,9 +491,7 @@ export async function exportBackupJson(
     return { status: 'downloaded', fileName };
   }
 
-  const blob = new Blob([jsonText], {
-    type: 'application/json',
-  });
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -436,6 +507,42 @@ export async function exportBackupJson(
   }
 
   return { status: 'downloaded', fileName };
+}
+
+/** Exports a dated JSON backup file via native Android Share or browser download. */
+export async function exportBackupJson(
+  snapshot: AppStateSnapshot,
+  options?: ExportBackupOptions
+): Promise<ExportBackupResult> {
+  const payload = createBackupPayload(snapshot);
+  const jsonText = JSON.stringify(payload, null, 2);
+  const fileName = `financial-tracker-backup-${toDateOnlyString(new Date())}.json`;
+
+  return shareOrDownloadTextFile({
+    fileName,
+    content: jsonText,
+    mimeType: 'application/json',
+    title: options?.title ?? 'Financial Tracker Backup',
+    dialogTitle: options?.dialogTitle ?? 'Simpan atau Bagikan Backup JSON',
+  });
+}
+
+/** Exports all transactions as a CSV file via native Android Share or browser download. */
+export async function exportCashBookCsv(
+  transactions: Transaction[],
+  categories: Category[],
+  options?: ExportCsvOptions
+): Promise<ExportBackupResult> {
+  const csvContent = buildCashBookCsvContent(transactions, categories, options);
+  const fileName = `buku-kas-financial-tracker-${toDateOnlyString(new Date())}.csv`;
+
+  return shareOrDownloadTextFile({
+    fileName,
+    content: csvContent,
+    mimeType: 'text/csv;charset=utf-8;',
+    title: options?.title ?? 'Rekap Buku Kas Financial Tracker',
+    dialogTitle: options?.dialogTitle ?? 'Simpan atau Bagikan Rekap CSV',
+  });
 }
 
 /** Parses and validates an uploaded JSON backup string into an AppStateSnapshot. */

@@ -18,7 +18,7 @@ import {
   INITIAL_CATEGORIES,
   formatCurrency,
 } from './data/mockData';
-import { CheckCircle2, Trash2 } from 'lucide-react';
+import { BookOpen, CheckCircle2, Trash2 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { TransactionsView } from './components/TransactionsView';
@@ -27,9 +27,10 @@ import { ReportsView } from './components/ReportsView';
 import { RecurringView } from './components/RecurringView';
 import { TransactionModal } from './components/TransactionModal';
 import { OfflineSyncModal } from './components/OfflineSyncModal';
+import { CashBookModal } from './components/CashBookModal';
 import { LockScreen, SecuritySettingsModal } from './components/LockScreen';
 import { AndroidBottomNav } from './components/AndroidBottomNav';
-import { useTabSeo, TAB_SEO_REGISTRY } from './utils/seo';
+import { useTabSeo } from './utils/seo';
 import { PeriodFilter } from './utils/finance';
 import {
   AppStateSnapshot,
@@ -48,6 +49,22 @@ import {
   recurringOccurrenceKey,
   toDateOnlyString,
 } from './utils/finance';
+import {
+  RawFinanceNotification,
+  acknowledgePendingNotifications,
+  addNotificationListener,
+  drainPendingNotifications,
+  isNotificationCaptureSupported,
+  isNotificationPermissionGranted,
+  loadAutoRecordEnabled,
+  saveAutoRecordEnabled,
+} from './utils/notificationBridge';
+import {
+  createBankJagoTestNotifications,
+  loadProcessedNotificationIds,
+  markNotificationIdsProcessed,
+  parseBankNotification,
+} from './utils/notificationParser';
 
 type ToastTone = 'income' | 'expense' | 'info' | 'delete';
 
@@ -56,6 +73,14 @@ interface ToastState {
   message: string;
   tone: ToastTone;
 }
+
+const VALID_TABS = new Set([
+  'dashboard',
+  'transactions',
+  'budgets',
+  'reports',
+  'recurring',
+]);
 
 export default function App() {
   const { t } = useLanguage();
@@ -69,16 +94,8 @@ export default function App() {
   // Theme state
   const [isDark, setIsDark] = useState<boolean>(() => loadThemePreference() ?? false);
 
-  // App Navigation state
-  const [currentTab, setCurrentTab] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const paramTab = new URLSearchParams(window.location.search).get('tab');
-      if (paramTab && TAB_SEO_REGISTRY[paramTab]) {
-        return paramTab;
-      }
-    }
-    return 'dashboard';
-  });
+  // App Navigation state (always start at dashboard)
+  const [currentTab, setCurrentTab] = useState<string>('dashboard');
 
   // Dynamic SEO & Document Head Metadata Service Hook
   useTabSeo(currentTab);
@@ -94,6 +111,23 @@ export default function App() {
   const [recurringList, setRecurringList] = useState<RecurringTransaction[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimerRef = useRef<number | null>(null);
+  const [isUnlockTransitioning, setIsUnlockTransitioning] = useState<boolean>(false);
+  const isUnlockTransitioningRef = useRef<boolean>(false);
+  isUnlockTransitioningRef.current = isUnlockTransitioning;
+  const unlockTransitionTimerRef = useRef<number | null>(null);
+
+  const startUnlockTransition = () => {
+    if (unlockTransitionTimerRef.current !== null) {
+      window.clearTimeout(unlockTransitionTimerRef.current);
+    }
+    isUnlockTransitioningRef.current = true;
+    setIsUnlockTransitioning(true);
+    unlockTransitionTimerRef.current = window.setTimeout(() => {
+      unlockTransitionTimerRef.current = null;
+      isUnlockTransitioningRef.current = false;
+      setIsUnlockTransitioning(false);
+    }, 250);
+  };
 
   const showToast = (message: string, tone: ToastTone = 'info') => {
     if (toastTimerRef.current !== null) {
@@ -111,14 +145,37 @@ export default function App() {
       if (toastTimerRef.current !== null) {
         window.clearTimeout(toastTimerRef.current);
       }
+      if (unlockTransitionTimerRef.current !== null) {
+        window.clearTimeout(unlockTransitionTimerRef.current);
+      }
     };
   }, []);
 
+  // Auto-Record Notification preference
+  const [autoRecordEnabled, setAutoRecordEnabled] = useState<boolean>(() =>
+    loadAutoRecordEnabled()
+  );
+
+  const handleToggleAutoRecord = (next: boolean) => {
+    saveAutoRecordEnabled(next);
+    setAutoRecordEnabled(next);
+  };
+
   // Ref mirrors are updated immediately so rapid repeated actions cannot
   // re-post the same recurring occurrence before React re-renders.
+  const categoriesRef = useRef(categories);
   const transactionsRef = useRef(transactions);
   const recurringRef = useRef(recurringList);
   const processingRecurringRef = useRef(false);
+  const autoRecordEnabledRef = useRef(autoRecordEnabled);
+  const syncingNotifsRef = useRef(false);
+  const toastMessagesRef = useRef(t.toasts);
+  toastMessagesRef.current = t.toasts;
+  autoRecordEnabledRef.current = autoRecordEnabled;
+
+  useEffect(() => {
+    categoriesRef.current = categories;
+  }, [categories]);
 
   useEffect(() => {
     transactionsRef.current = transactions;
@@ -129,8 +186,13 @@ export default function App() {
   }, [recurringList]);
 
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const isHydratedRef = useRef(isHydrated);
+  isHydratedRef.current = isHydrated;
+  const isUnlockedRef = useRef(isUnlocked);
+  isUnlockedRef.current = isUnlocked;
 
   const applySnapshot = (snapshot: AppStateSnapshot) => {
+    categoriesRef.current = snapshot.categories;
     transactionsRef.current = snapshot.transactions;
     recurringRef.current = snapshot.recurringList;
     setCategories(snapshot.categories);
@@ -182,7 +244,8 @@ export default function App() {
   ]);
 
   const handleTabChange = (newTab: string) => {
-    if (newTab === currentTab) return;
+    if (isUnlockTransitioningRef.current) return;
+    if (!VALID_TABS.has(newTab) || newTab === currentTab) return;
     setCurrentTab(newTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -192,6 +255,7 @@ export default function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txModalType, setTxModalType] = useState<TransactionType>('EXPENSE');
   const [showDataModal, setShowDataModal] = useState<boolean>(false);
+  const [showCashBookModal, setShowCashBookModal] = useState<boolean>(false);
 
   // Android hardware/gesture back button handling
   const lastBackPressRef = useRef<number>(0);
@@ -204,6 +268,7 @@ export default function App() {
     isChangingPin,
     showTxModal,
     showDataModal,
+    showCashBookModal,
     showSecurityModal,
     currentTab,
   });
@@ -212,6 +277,7 @@ export default function App() {
     isChangingPin,
     showTxModal,
     showDataModal,
+    showCashBookModal,
     showSecurityModal,
     currentTab,
   };
@@ -240,6 +306,11 @@ export default function App() {
       if (state.showDataModal) {
         lastBackPressRef.current = 0;
         setShowDataModal(false);
+        return;
+      }
+      if (state.showCashBookModal) {
+        lastBackPressRef.current = 0;
+        setShowCashBookModal(false);
         return;
       }
       if (state.showSecurityModal) {
@@ -281,7 +352,179 @@ export default function App() {
     };
   }, []);
 
+  const ingestBankNotifications = (
+    items: RawFinanceNotification[],
+    options?: { force?: boolean }
+  ): number => {
+    if (
+      !isHydratedRef.current ||
+      !isUnlockedRef.current ||
+      (!options?.force && !autoRecordEnabledRef.current) ||
+      items.length === 0
+    ) {
+      return 0;
+    }
+
+    const processedSet = new Set(loadProcessedNotificationIds());
+    const existingIdemKeys = new Set(
+      transactionsRef.current.map((tx) => tx.idempotencyKey)
+    );
+    const seenIds: string[] = [];
+    const createdTxs: Transaction[] = [];
+    const recordedMeta: Array<{ appName: string; amount: number; txType: TransactionType }> = [];
+
+    for (const item of items) {
+      if (!item || !item.id || processedSet.has(item.id)) {
+        continue;
+      }
+
+      processedSet.add(item.id);
+      seenIds.push(item.id);
+
+      const idempotencyKey = `notif-${item.id}`;
+      if (existingIdemKeys.has(idempotencyKey)) {
+        continue;
+      }
+
+      const parsed = parseBankNotification(item, categoriesRef.current);
+      if (!parsed) {
+        continue;
+      }
+
+      const txType: TransactionType = parsed.type === 'income' ? 'INCOME' : 'EXPENSE';
+      const appTag = parsed.appName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      const newTx: Transaction = {
+        id: createId('tx'),
+        categoryId: parsed.categoryId,
+        type: txType,
+        amount: parsed.amount,
+        currency: 'IDR',
+        description: parsed.description,
+        notes: parsed.notes,
+        transactionDate: new Date(`${parsed.date}T12:00:00`).toISOString(),
+        tags: appTag ? ['auto-notif', appTag] : ['auto-notif'],
+        idempotencyKey,
+        syncStatus: 'SYNCED',
+        createdAt: new Date().toISOString(),
+      };
+
+      createdTxs.push(newTx);
+      existingIdemKeys.add(idempotencyKey);
+      recordedMeta.push({
+        appName: parsed.appName,
+        amount: parsed.amount,
+        txType,
+      });
+    }
+
+    if (seenIds.length > 0) {
+      markNotificationIdsProcessed(seenIds);
+    }
+
+    if (createdTxs.length > 0) {
+      transactionsRef.current = [...createdTxs.reverse(), ...transactionsRef.current];
+      setTransactions(transactionsRef.current);
+
+      if (recordedMeta.length === 1) {
+        const entry = recordedMeta[0];
+        const sign = entry.txType === 'INCOME' ? '+' : '-';
+        const formattedAmount = formatCurrency(entry.amount, 'IDR');
+        showToastRef.current(
+          toastMessagesRef.current.autoRecordedSingle(sign, formattedAmount, entry.appName),
+          entry.txType === 'INCOME' ? 'income' : 'expense'
+        );
+      } else {
+        showToastRef.current(
+          toastMessagesRef.current.autoRecordedMultiple(recordedMeta.length),
+          'info'
+        );
+      }
+    }
+
+    return createdTxs.length;
+  };
+
+  const syncPendingNotifications = async () => {
+    if (
+      !isNotificationCaptureSupported() ||
+      !isHydratedRef.current ||
+      !isUnlockedRef.current ||
+      !autoRecordEnabledRef.current
+    ) {
+      return;
+    }
+    if (syncingNotifsRef.current) return;
+    syncingNotifsRef.current = true;
+
+    try {
+      const granted = await isNotificationPermissionGranted();
+      if (!granted || !isUnlockedRef.current || !autoRecordEnabledRef.current) return;
+      const items = await drainPendingNotifications();
+      if (!isUnlockedRef.current) return;
+      ingestBankNotifications(items);
+    } finally {
+      syncingNotifsRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!isNotificationCaptureSupported() || !isHydrated || !isUnlocked || !autoRecordEnabled) {
+      return;
+    }
+
+    let removed = false;
+    let appStateHandle: PluginListenerHandle | null = null;
+    let notifHandle: PluginListenerHandle | null = null;
+
+    void syncPendingNotifications();
+
+    void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive && !removed && isUnlockedRef.current) {
+        void syncPendingNotifications();
+      }
+    }).then((handle) => {
+      if (removed) {
+        void handle.remove();
+      } else {
+        appStateHandle = handle;
+      }
+    });
+
+    void addNotificationListener((item) => {
+      if (!removed && isUnlockedRef.current && autoRecordEnabledRef.current) {
+        ingestBankNotifications([item]);
+        if (item?.id) {
+          void acknowledgePendingNotifications([item.id]);
+        }
+      }
+    }).then((handle) => {
+      if (removed) {
+        if (handle) void handle.remove();
+      } else {
+        notifHandle = handle;
+      }
+    });
+
+    return () => {
+      removed = true;
+      if (appStateHandle) {
+        void appStateHandle.remove();
+      }
+      if (notifHandle) {
+        void notifHandle.remove();
+      }
+    };
+  }, [isHydrated, isUnlocked, autoRecordEnabled]);
+
+  const handleTestBankJagoNotifications = (): number =>
+    ingestBankNotifications(createBankJagoTestNotifications(), { force: true });
+
   const openNewTransaction = (type: TransactionType = 'EXPENSE') => {
+    if (isUnlockTransitioningRef.current) return;
     setEditingTx(null);
     setTxModalType(type);
     setShowTxModal(true);
@@ -493,14 +736,49 @@ export default function App() {
     });
   };
 
+  const handleUnlockSuccess = () => {
+    startUnlockTransition();
+    setShowTxModal(false);
+    setShowDataModal(false);
+    setShowSecurityModal(false);
+    setShowCashBookModal(false);
+    setCurrentTab('dashboard');
+    setHasPin(true);
+    setIsUnlocked(true);
+    window.scrollTo(0, 0);
+  };
+
+  const handleLockApp = () => {
+    if (unlockTransitionTimerRef.current !== null) {
+      window.clearTimeout(unlockTransitionTimerRef.current);
+      unlockTransitionTimerRef.current = null;
+    }
+    isUnlockTransitioningRef.current = false;
+    setIsUnlockTransitioning(false);
+    setShowTxModal(false);
+    setShowDataModal(false);
+    setShowSecurityModal(false);
+    setShowCashBookModal(false);
+    setIsChangingPin(false);
+    setCurrentTab('dashboard');
+    setIsUnlocked(false);
+    window.scrollTo(0, 0);
+  };
+
+  useEffect(() => {
+    if (!isUnlocked || isChangingPin) return;
+    window.scrollTo(0, 0);
+    const frameId = window.requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isUnlocked, isChangingPin]);
+
   if (!isUnlocked) {
     return (
       <LockScreen
         mode={hasPin ? 'unlock' : 'setup'}
-        onSuccess={() => {
-          setHasPin(true);
-          setIsUnlocked(true);
-        }}
+        onSuccess={handleUnlockSuccess}
       />
     );
   }
@@ -512,6 +790,7 @@ export default function App() {
         isChangePin
         onCancel={() => setIsChangingPin(false)}
         onSuccess={() => {
+          startUnlockTransition();
           setHasPin(true);
           setIsChangingPin(false);
         }}
@@ -519,8 +798,24 @@ export default function App() {
     );
   }
 
+  const activeTab = VALID_TABS.has(currentTab) ? currentTab : 'dashboard';
+
   return (
-    <div className="min-h-screen bg-[#FBF8F2] dark:bg-[#121019] text-[#181522] dark:text-[#F5F3FA] transition-colors flex flex-col font-sans selection:bg-[#EFEAFE] selection:text-[#704BEA]">
+    <div
+      className={`min-h-screen bg-[#FBF8F2] dark:bg-[#121019] text-[#181522] dark:text-[#F5F3FA] transition-colors flex flex-col font-sans selection:bg-[#EFEAFE] selection:text-[#704BEA] ${
+        isUnlockTransitioning ? 'pointer-events-none select-none' : ''
+      }`}
+    >
+      {isUnlockTransitioning && (
+        <div
+          aria-hidden="true"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="fixed inset-0 z-[70] pointer-events-auto bg-transparent touch-none"
+        />
+      )}
 
       {/* In-App Toast Notification */}
       {toast && (
@@ -557,17 +852,18 @@ export default function App() {
 
       {/* Top App Bar (Unified Soft Modern Top Bar Contract) */}
       <Header
-        currentTab={currentTab}
+        currentTab={activeTab}
         setCurrentTab={handleTabChange}
         isDark={isDark}
         toggleTheme={toggleTheme}
         onOpenDataModal={() => setShowDataModal(true)}
         onOpenSecurityModal={() => setShowSecurityModal(true)}
+        onLockApp={handleLockApp}
       />
 
       {/* Main Content Area (Fluid with responsive clearance for mobile floating dock) */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-32 sm:pb-28 md:pb-16">
-        {currentTab === 'dashboard' && (
+        {activeTab === 'dashboard' && (
           <DashboardView
             transactions={transactions}
             categories={categories}
@@ -578,10 +874,11 @@ export default function App() {
             onNavigateTab={handleTabChange}
             onSelectTransaction={openEditTransaction}
             onOpenNewTx={openNewTransaction}
+            onOpenCashBook={() => setShowCashBookModal(true)}
           />
         )}
 
-        {currentTab === 'transactions' && (
+        {activeTab === 'transactions' && (
           <TransactionsView
             transactions={transactions}
             categories={categories}
@@ -592,7 +889,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'budgets' && (
+        {activeTab === 'budgets' && (
           <BudgetsView
             budgets={budgets}
             categories={categories}
@@ -603,7 +900,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'reports' && (
+        {activeTab === 'reports' && (
           <ReportsView
             transactions={transactions}
             categories={categories}
@@ -611,7 +908,7 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'recurring' && (
+        {activeTab === 'recurring' && (
           <RecurringView
             recurringList={recurringList}
             categories={categories}
@@ -626,18 +923,27 @@ export default function App() {
 
       {/* Mobile Bottom Navigation (Visible strictly on mobile screens, hidden on desktop) */}
       <AndroidBottomNav
-        currentTab={currentTab}
+        currentTab={activeTab}
         setCurrentTab={handleTabChange}
         onOpenNewTx={() => openNewTransaction('EXPENSE')}
+        disabled={isUnlockTransitioning}
       />
 
       {/* Quiet, Minimalist Editorial Footer (§1.B Anti-slop) */}
       <footer className="mt-auto border-t border-[#EDE7DE] dark:border-[#22202E] bg-white/70 dark:bg-[#0E0D13]/70 backdrop-blur-xs py-6 mb-24 md:mb-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#706B82] dark:text-[#9D98AC]">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="font-semibold text-[#16151D] dark:text-white">Financial Tracker</span>
             <span aria-hidden="true">·</span>
-            <span>{t.footer.tagline}</span>
+            <button
+              type="button"
+              onClick={() => setShowCashBookModal(true)}
+              aria-label={t.footer.openCashBookAria}
+              className="min-h-[44px] px-2.5 rounded-xl font-medium text-[#704BEA] dark:text-[#B8B0FF] hover:bg-[#704BEA]/10 dark:hover:bg-[#B8B0FF]/15 transition-colors inline-flex items-center gap-1.5 cursor-pointer btn-tactile focus:outline-none focus-visible:ring-2 focus-visible:ring-[#704BEA]"
+            >
+              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+              <span>{t.footer.tagline}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-4">
@@ -669,6 +975,21 @@ export default function App() {
         snapshot={currentSnapshot}
         onRestoreBackup={handleRestoreBackup}
         onClearData={handleClearData}
+        autoRecordEnabled={autoRecordEnabled}
+        onToggleAutoRecord={handleToggleAutoRecord}
+        onSyncPendingNotifications={syncPendingNotifications}
+        onTestBankJagoNotifications={handleTestBankJagoNotifications}
+      />
+
+      {/* Local Rupiah Cash Book Modal */}
+      <CashBookModal
+        isOpen={showCashBookModal}
+        onClose={() => setShowCashBookModal(false)}
+        transactions={transactions}
+        categories={categories}
+        currency={currency}
+        onSaveTransaction={handleSaveTransaction}
+        onNotify={(message) => showToast(message, 'info')}
       />
 
       {/* Local PIN & Biometric Security Settings Modal */}
@@ -679,10 +1000,7 @@ export default function App() {
           setShowSecurityModal(false);
           setIsChangingPin(true);
         }}
-        onLockNow={() => {
-          setShowSecurityModal(false);
-          setIsUnlocked(false);
-        }}
+        onLockNow={handleLockApp}
       />
 
     </div>

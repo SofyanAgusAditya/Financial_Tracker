@@ -12,12 +12,14 @@ interface AndroidBottomNavProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onOpenNewTx: () => void;
+  disabled?: boolean;
 }
 
 export const AndroidBottomNav: React.FC<AndroidBottomNavProps> = ({
   currentTab,
   setCurrentTab,
   onOpenNewTx,
+  disabled = false,
 }) => {
   const { t } = useLanguage();
 
@@ -34,7 +36,11 @@ export const AndroidBottomNav: React.FC<AndroidBottomNavProps> = ({
       className="md:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 px-3 pointer-events-none select-none flex justify-center"
     >
       {/* Treats signature dark floating capsule dock */}
-      <div className="pointer-events-auto bg-[#100E17]/95 backdrop-blur-2xl rounded-full p-1 sm:p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.4)] border border-white/20 flex items-center justify-between gap-0.5 sm:gap-1 w-full max-w-[340px] sm:max-w-sm">
+      <div
+        className={`${
+          disabled ? 'pointer-events-none' : 'pointer-events-auto'
+        } bg-[#100E17]/95 backdrop-blur-2xl rounded-full p-1 sm:p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.4)] border border-white/20 flex items-center justify-between gap-0.5 sm:gap-1 w-full max-w-[340px] sm:max-w-sm`}
+      >
         
         {/* Left Nav Items */}
         {navItems.slice(0, 2).map((item) => {

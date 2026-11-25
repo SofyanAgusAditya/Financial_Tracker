@@ -163,6 +163,7 @@ const idTranslations = {
     toolsTitle: 'Alat & Pengaturan',
     toggleTheme: 'Ganti Tema',
     switchLanguage: 'Pilih Bahasa',
+    lockApp: 'Kunci Aplikasi',
   },
   bottomNav: {
     ariaLabel: 'Navigasi Bawah Mobile',
@@ -174,6 +175,7 @@ const idTranslations = {
   },
   footer: {
     tagline: 'Buku kas lokal Rupiah',
+    openCashBookAria: 'Buka Buku Kas Lokal (Rupiah)',
     backupData: 'Backup & Data',
   },
   toasts: {
@@ -183,10 +185,15 @@ const idTranslations = {
     txDeleted: (desc: string, amount: string) => `Transaksi "${desc}" (${amount}) dihapus`,
     pressBackToExit: 'Tekan sekali lagi untuk keluar',
     confirmDeleteTx: (desc: string) => `Hapus "${desc}"? Tindakan ini tidak dapat dibatalkan.`,
+    autoRecordedSingle: (sign: '+' | '-', amount: string, appName: string) =>
+      `Auto-catat: ${sign}${amount} (${appName})`,
+    autoRecordedMultiple: (count: number) =>
+      `Auto-catat: ${count} transaksi baru dari notifikasi tersimpan`,
   },
   dashboard: {
     eyebrowLeft: 'Ringkasan Keuangan',
     eyebrowRight: 'Buku Kas Aktif',
+    openCashBookTitle: 'Buka Buku Kas Lokal (Rupiah)',
     heroTitlePrefix: 'Kelola tabungan ',
     heroTitleHighlight: 'lebih rapi.',
     heroSubtitle: 'Pantau saldo kas, laju pengeluaran, dan batas anggaran secara real-time',
@@ -383,6 +390,23 @@ const idTranslations = {
   txModal: {
     editTitle: 'Ubah Transaksi',
     newTitle: 'Catat Transaksi',
+    scanReceipt: 'Scan Struk',
+    scanningReceipt: 'Memindai struk...',
+    scanPromptTitle: 'Pilih Sumber Foto Struk',
+    scanTakePhoto: 'Ambil Foto dengan Kamera',
+    scanFromGallery: 'Pilih dari Galeri',
+    scanNativeOnly:
+      'Fitur Scan Struk OCR offline tersedia di aplikasi Android. Silakan isi detail transaksi secara manual di browser web.',
+    scanSuccessReview:
+      'Data struk berhasil terbaca otomatis. Mohon periksa kembali nominal, deskripsi, kategori, tanggal, dan catatan sebelum menyimpan.',
+    scanPartialReview:
+      'Teks struk berhasil dipindai, namun detail belum terdeteksi lengkap. Silakan lengkapi kolom transaksi secara manual.',
+    scanNoText:
+      'Tidak ada teks yang terbaca pada foto struk. Coba ambil ulang foto di tempat yang lebih terang dan fokus.',
+    scanPermissionDenied:
+      'Izin kamera atau galeri ditolak. Aktifkan izin pada pengaturan perangkat untuk memindai struk.',
+    scanError:
+      'Gagal memindai struk. Pastikan foto jelas atau isi detail transaksi secara manual.',
     description: 'Deskripsi',
     descriptionPlaceholder: 'mis. Belanja Bulanan, Gaji, Makan Siang',
     amountLabel: (currency: string) => `Nominal (${currency})`,
@@ -423,6 +447,28 @@ const idTranslations = {
     readError: 'Gagal membaca file cadangan. Coba pilih ulang file JSON.',
     clearSuccess:
       'Transaksi, anggaran, dan jadwal berulang telah dikosongkan. Kategori bawaan tetap dipertahankan.',
+    notifTitle: 'Auto-Catat Notifikasi E-Wallet & Bank',
+    notifSubtitle: 'Tangkap otomatis transaksi Bank Jago, DANA, GoPay, OVO, SeaBank, BCA, BRImo, Mandiri & lainnya',
+    notifSupportedLabel: 'Didukung:',
+    notifTestJagoBtn: 'Tes Notifikasi Bank Jago',
+    notifTestJagoSuccess: (count: number) =>
+      `Simulasi ${count} notifikasi Bank Jago (masuk & keluar) berhasil dicatat ke buku kas.`,
+    notifTestJagoError: 'Gagal menjalankan simulasi notifikasi Bank Jago.',
+    notifStatusActive: 'Aktif',
+    notifStatusInactive: 'Belum Aktif',
+    notifAndroidOnly: 'Android',
+    notifToggleLabel: 'Aktifkan Auto-Catat',
+    notifToggleHint: 'Otomatis menyimpan transaksi masuk/keluar saat notifikasi diterima',
+    notifAndroidOnlyHint:
+      'Hanya tersedia di aplikasi Android melalui layanan Akses Notifikasi perangkat.',
+    notifOpenSettingsBtn: 'Buka Izin Notifikasi',
+    notifCheckStatusBtn: 'Cek Status',
+    notifCheckingBtn: 'Memeriksa...',
+    notifPermissionActiveFeedback:
+      'Akses notifikasi aktif. Transaksi masuk/keluar dari e-wallet & bank akan dicatat otomatis.',
+    notifPermissionInactiveFeedback:
+      'Akses notifikasi belum aktif. Aktifkan "Financial Tracker Auto-Record" di Pengaturan Android.',
+    notifOpenSettingsError: 'Gagal membuka Pengaturan Akses Notifikasi perangkat.',
   },
   lockScreen: {
     localSecurity: 'Keamanan Lokal',
@@ -468,6 +514,64 @@ const idTranslations = {
     changePinBtn: 'Ubah PIN 6 Digit',
     lockNowBtn: 'Kunci Aplikasi Sekarang',
   },
+  cashBook: {
+    title: 'Buku Kas Lokal (Rupiah)',
+    subtitle: 'SQLite Lokal Offline · Mata Uang IDR',
+    closeAria: 'Tutup modal Buku Kas Lokal',
+    storageStatus: 'SQLite Lokal Offline · Mata Uang IDR',
+    summarySectionTitle: 'Ringkasan & Status Buku Kas',
+    overallNetBalance: 'Saldo Bersih Keseluruhan',
+    totalTransactions: 'Total Transaksi',
+    txCount: (count: number) => `${count} transaksi`,
+    allTimeIncome: 'Total Pemasukan',
+    allTimeExpense: 'Total Pengeluaran',
+    dateRangeLabel: 'Rentang Tanggal',
+    noTransactionsRange: 'Belum ada transaksi tercatat',
+    adjustmentSectionTitle: 'Penyesuaian Saldo / Saldo Awal Kas',
+    adjustmentSectionSubtitle:
+      'Samakan saldo tercatat di aplikasi dengan uang kas nyata Anda saat ini.',
+    actualBalanceLabel: 'Saldo Kas Nyata Saat Ini (IDR)',
+    actualBalancePlaceholder: 'cth. 2.500.000',
+    recordedBalanceLabel: 'Saldo Tercatat:',
+    differenceLabel: 'Selisih Saldo:',
+    adjustmentHint: 'Masukkan nominal saldo kas nyata untuk menghitung selisih otomatis.',
+    balanceMatched: 'Saldo tercatat sudah sesuai dengan saldo kas nyata Anda.',
+    willRecordIncome: (amount: string) =>
+      `Akan dicatat sebagai Pemasukan sebesar ${amount}`,
+    willRecordExpense: (amount: string) =>
+      `Akan dicatat sebagai Pengeluaran sebesar ${amount}`,
+    recordAdjustmentBtn: 'Catat Penyesuaian Saldo',
+    adjustmentTxDescription: 'Penyesuaian Saldo Kas',
+    adjustmentNote: (recorded: string, actual: string, signedDiff: string) =>
+      `Penyesuaian saldo kas: tercatat ${recorded} → nyata ${actual} (selisih ${signedDiff})`,
+    adjustmentSuccess: (typeLabel: string, amount: string) =>
+      `Penyesuaian saldo (${typeLabel} ${amount}) berhasil dicatat ke buku kas.`,
+    exportSectionTitle: 'Ekspor Rekap Buku Kas',
+    exportSectionSubtitle:
+      'Bagikan daftar seluruh transaksi ke format CSV atau salin ringkasan arus kas bulan ini.',
+    exportCsvBtn: 'Ekspor CSV',
+    exportingCsvBtn: 'Menyiapkan CSV...',
+    copySummaryBtn: 'Salin Ringkasan',
+    copiedBtn: 'Tersalin!',
+    csvShareTitle: 'Rekap Buku Kas Financial Tracker',
+    csvShareDialogTitle: 'Simpan atau Bagikan Rekap CSV',
+    csvHeaders: ['Tanggal', 'Tipe', 'Kategori', 'Deskripsi', 'Nominal IDR', 'Tag', 'Catatan'],
+    csvEmptyInfo: 'Belum ada transaksi untuk diekspor ke CSV.',
+    csvExportSuccess: (fileName: string) => `Rekap CSV berhasil diunduh (${fileName}).`,
+    csvExportSharedSuccess: (fileName: string) =>
+      `Rekap CSV siap disimpan atau dibagikan (${fileName}).`,
+    csvExportCancelled: 'Ekspor rekap CSV dibatalkan.',
+    csvExportError: 'Gagal mengekspor rekap CSV. Silakan coba lagi.',
+    copySuccess: 'Ringkasan arus kas bulan ini berhasil disalin ke clipboard.',
+    copyError: 'Gagal menyalin ringkasan ke clipboard.',
+    summaryHeader: (monthLabel: string) => `Ringkasan Buku Kas · ${monthLabel}`,
+    summaryMonthIncome: (amount: string) => `Pemasukan Bulan Ini: ${amount}`,
+    summaryMonthExpense: (amount: string) => `Pengeluaran Bulan Ini: ${amount}`,
+    summaryMonthNet: (signedAmount: string) => `Arus Kas Bersih Bulan Ini: ${signedAmount}`,
+    summaryMonthCount: (count: number) => `Transaksi Bulan Ini: ${count} transaksi`,
+    summaryOverallBalance: (amount: string, totalCount: number) =>
+      `Saldo Kas Keseluruhan: ${amount} (Total ${totalCount} transaksi)`,
+  },
 };
 
 export type TranslationDictionary = typeof idTranslations;
@@ -498,6 +602,7 @@ const enTranslations: TranslationDictionary = {
     toolsTitle: 'Tools & Settings',
     toggleTheme: 'Toggle Theme',
     switchLanguage: 'Select Language',
+    lockApp: 'Lock App',
   },
   bottomNav: {
     ariaLabel: 'Mobile Navigation Dock',
@@ -509,6 +614,7 @@ const enTranslations: TranslationDictionary = {
   },
   footer: {
     tagline: 'Local-first Rupiah ledger',
+    openCashBookAria: 'Open Local Cash Book (Rupiah)',
     backupData: 'Backup & Data',
   },
   toasts: {
@@ -518,10 +624,15 @@ const enTranslations: TranslationDictionary = {
     txDeleted: (desc: string, amount: string) => `Transaction "${desc}" (${amount}) deleted`,
     pressBackToExit: 'Press back again to exit',
     confirmDeleteTx: (desc: string) => `Delete "${desc}"? This action cannot be undone.`,
+    autoRecordedSingle: (sign: '+' | '-', amount: string, appName: string) =>
+      `Auto-recorded: ${sign}${amount} (${appName})`,
+    autoRecordedMultiple: (count: number) =>
+      `Auto-recorded: ${count} new transactions from notifications`,
   },
   dashboard: {
     eyebrowLeft: 'Portfolio Intelligence',
     eyebrowRight: 'Active Ledger',
+    openCashBookTitle: 'Open Local Cash Book (Rupiah)',
     heroTitlePrefix: 'Make your capital ',
     heroTitleHighlight: 'thrive.',
     heroSubtitle: 'Real-time cash liquidity, spending velocity, and budget envelopes',
@@ -721,6 +832,23 @@ const enTranslations: TranslationDictionary = {
   txModal: {
     editTitle: 'Edit Transaction',
     newTitle: 'Record Transaction',
+    scanReceipt: 'Scan Receipt',
+    scanningReceipt: 'Scanning receipt...',
+    scanPromptTitle: 'Choose Receipt Photo Source',
+    scanTakePhoto: 'Take Photo with Camera',
+    scanFromGallery: 'Choose from Gallery',
+    scanNativeOnly:
+      'Offline OCR receipt scanning is available in the Android app. Please enter the transaction details manually in the web browser.',
+    scanSuccessReview:
+      'Receipt details were auto-filled. Please review the amount, description, category, date, and notes before saving.',
+    scanPartialReview:
+      'Receipt text was scanned, but some details could not be detected automatically. Please complete the fields manually.',
+    scanNoText:
+      'No readable text was detected in the photo. Try capturing the receipt again in brighter lighting.',
+    scanPermissionDenied:
+      'Camera or gallery permission was denied. Enable permissions in device settings to scan receipts.',
+    scanError:
+      'Failed to scan the receipt. Make sure the photo is clear or enter the details manually.',
     description: 'Description',
     descriptionPlaceholder: 'e.g. Grocery Store, Client Payout, Lunch',
     amountLabel: (currency: string) => `Amount (${currency})`,
@@ -761,6 +889,28 @@ const enTranslations: TranslationDictionary = {
     readError: 'Failed to read backup file. Please choose the JSON file again.',
     clearSuccess:
       'Transactions, budgets, and recurring schedules have been cleared. Default categories were preserved.',
+    notifTitle: 'Auto-Record E-Wallet & Bank Notifications',
+    notifSubtitle: 'Automatically capture Bank Jago, DANA, GoPay, OVO, SeaBank, BCA, BRImo, Mandiri & more',
+    notifSupportedLabel: 'Supported:',
+    notifTestJagoBtn: 'Test Bank Jago Notification',
+    notifTestJagoSuccess: (count: number) =>
+      `Simulated ${count} Bank Jago notifications (income & expense) recorded to ledger.`,
+    notifTestJagoError: 'Failed to run Bank Jago notification simulation.',
+    notifStatusActive: 'Active',
+    notifStatusInactive: 'Not Active',
+    notifAndroidOnly: 'Android',
+    notifToggleLabel: 'Enable Auto-Record',
+    notifToggleHint: 'Automatically save incoming/outgoing transactions when notifications arrive',
+    notifAndroidOnlyHint:
+      'Only available on the Android app via device Notification Access settings.',
+    notifOpenSettingsBtn: 'Open Notification Access',
+    notifCheckStatusBtn: 'Check Status',
+    notifCheckingBtn: 'Checking...',
+    notifPermissionActiveFeedback:
+      'Notification access is active. E-wallet & bank transactions will be recorded automatically.',
+    notifPermissionInactiveFeedback:
+      'Notification access is not active yet. Enable "Financial Tracker Auto-Record" in Android Settings.',
+    notifOpenSettingsError: 'Failed to open device Notification Access settings.',
   },
   lockScreen: {
     localSecurity: 'Local Security',
@@ -804,6 +954,65 @@ const enTranslations: TranslationDictionary = {
       `Confirm ${label.toLowerCase()} to enable biometric lock`,
     changePinBtn: 'Change 6-Digit PIN',
     lockNowBtn: 'Lock App Now',
+  },
+  cashBook: {
+    title: 'Local Cash Book (Rupiah)',
+    subtitle: 'Local Offline SQLite · IDR Currency',
+    closeAria: 'Close Local Cash Book modal',
+    storageStatus: 'Local Offline SQLite · IDR Currency',
+    summarySectionTitle: 'Cash Book Summary & Status',
+    overallNetBalance: 'Overall Net Balance',
+    totalTransactions: 'Total Transactions',
+    txCount: (count: number) => `${count} ${count === 1 ? 'transaction' : 'transactions'}`,
+    allTimeIncome: 'Total Income',
+    allTimeExpense: 'Total Expenses',
+    dateRangeLabel: 'Date Range',
+    noTransactionsRange: 'No transactions recorded yet',
+    adjustmentSectionTitle: 'Balance Adjustment / Initial Cash',
+    adjustmentSectionSubtitle:
+      'Match your app balance with the actual Rupiah cash you currently hold.',
+    actualBalanceLabel: 'Actual Cash Balance Now (IDR)',
+    actualBalancePlaceholder: 'e.g. 2.500.000',
+    recordedBalanceLabel: 'Recorded Balance:',
+    differenceLabel: 'Balance Difference:',
+    adjustmentHint: 'Enter your actual cash balance to calculate the adjustment automatically.',
+    balanceMatched: 'Your recorded balance already matches your actual cash balance.',
+    willRecordIncome: (amount: string) =>
+      `Will record an Income entry of ${amount}`,
+    willRecordExpense: (amount: string) =>
+      `Will record an Expense entry of ${amount}`,
+    recordAdjustmentBtn: 'Record Balance Adjustment',
+    adjustmentTxDescription: 'Cash Balance Adjustment',
+    adjustmentNote: (recorded: string, actual: string, signedDiff: string) =>
+      `Cash balance adjustment: recorded ${recorded} → actual ${actual} (diff ${signedDiff})`,
+    adjustmentSuccess: (typeLabel: string, amount: string) =>
+      `Balance adjustment (${typeLabel} ${amount}) recorded to cash book.`,
+    exportSectionTitle: 'Export Cash Book Summary',
+    exportSectionSubtitle:
+      'Share all recorded transactions as CSV or copy this month’s cash flow summary.',
+    exportCsvBtn: 'Export CSV',
+    exportingCsvBtn: 'Preparing CSV...',
+    copySummaryBtn: 'Copy Summary',
+    copiedBtn: 'Copied!',
+    csvShareTitle: 'Financial Tracker Cash Book Export',
+    csvShareDialogTitle: 'Save or Share CSV Summary',
+    csvHeaders: ['Date', 'Type', 'Category', 'Description', 'Amount IDR', 'Tags', 'Notes'],
+    csvEmptyInfo: 'No transactions available to export to CSV yet.',
+    csvExportSuccess: (fileName: string) => `CSV summary downloaded (${fileName}).`,
+    csvExportSharedSuccess: (fileName: string) =>
+      `CSV summary ready to save or share (${fileName}).`,
+    csvExportCancelled: 'CSV export was cancelled.',
+    csvExportError: 'Failed to export CSV summary. Please try again.',
+    copySuccess: 'This month’s cash flow summary was copied to the clipboard.',
+    copyError: 'Failed to copy summary to the clipboard.',
+    summaryHeader: (monthLabel: string) => `Cash Book Summary · ${monthLabel}`,
+    summaryMonthIncome: (amount: string) => `This Month Income: ${amount}`,
+    summaryMonthExpense: (amount: string) => `This Month Expenses: ${amount}`,
+    summaryMonthNet: (signedAmount: string) => `This Month Net Cash Flow: ${signedAmount}`,
+    summaryMonthCount: (count: number) =>
+      `This Month Entries: ${count} ${count === 1 ? 'transaction' : 'transactions'}`,
+    summaryOverallBalance: (amount: string, totalCount: number) =>
+      `Overall Cash Balance: ${amount} (Total ${totalCount} ${totalCount === 1 ? 'transaction' : 'transactions'})`,
   },
 };
 

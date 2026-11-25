@@ -1,14 +1,204 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Script, TextRecognition } from '@capacitor-mlkit/text-recognition';
 import { 
   Transaction, 
   Category, 
   CurrencyCode, 
   TransactionType 
 } from '../types';
-import { ArrowDownRight, ArrowUpRight, X } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Camera as CameraIcon,
+  CheckCircle2,
+  Info,
+  Loader2,
+  X,
+} from 'lucide-react';
 import { toDateInputValue, toDateOnlyString } from '../utils/finance';
 import { formatThousandInput, parseThousandInput } from '../utils/formatters';
 import { translateCategoryName, useLanguage } from '../utils/i18n';
+import { parseReceiptText } from '../utils/receiptParser';
+
+interface ScanNotice {
+  tone: 'success' | 'info' | 'error';
+  message: string;
+}
+
+interface OcrLine {
+  text?: string;
+  frame?: { x?: number; y?: number; width?: number; height?: number } | null;
+  cornerPoints?: Array<{ x?: number; y?: number }> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+interface OcrBlock {
+  text?: string;
+  lines?: OcrLine[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+function getLineYCenter(line: OcrLine): number | null {
+  // Try frame
+  if (line.frame && line.frame.y != null && line.frame.height != null) {
+    return line.frame.y + line.frame.height / 2;
+  }
+  // Try cornerPoints (top-left, top-right, bottom-right, bottom-left)
+  if (line.cornerPoints && line.cornerPoints.length >= 4) {
+    const ys = line.cornerPoints.map((p) => p.y ?? 0);
+    return (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
+  return null;
+}
+
+function getLineXStart(line: OcrLine): number {
+  if (line.frame && line.frame.x != null) {
+    return line.frame.x;
+  }
+  if (line.cornerPoints && line.cornerPoints.length >= 1) {
+    const xs = line.cornerPoints.map((p) => p.x ?? 0);
+    return Math.min(...xs);
+  }
+  return 0;
+}
+
+function extractSpatiallyOrderedText(ocrResult: { text?: string; blocks?: OcrBlock[] }): string {
+  const blocks = ocrResult.blocks ?? [];
+
+  // Collect all lines with their spatial info
+  const allLines: Array<{ text: string; yCtr: number | null; xStart: number }> = [];
+  for (const block of blocks) {
+    const lines = block.lines ?? [];
+    for (const line of lines) {
+      const text = (line.text ?? '').trim();
+      if (!text) continue;
+      allLines.push({
+        text,
+        yCtr: getLineYCenter(line),
+        xStart: getLineXStart(line),
+      });
+    }
+  }
+
+  // Check if we have usable spatial coordinates
+  const hasCoords = allLines.some((l) => l.yCtr !== null);
+
+  if (!hasCoords) {
+    // Fallback: use ocrResult.text or join blocks
+    return (
+      ocrResult.text?.trim() ||
+      blocks.map((b) => b.text ?? '').join('\n').trim()
+    );
+  }
+
+  // Group lines by Y-center proximity (tolerance = 20px)
+  const Y_TOLERANCE = 20;
+  const rows: Array<Array<{ text: string; xStart: number }>> = [];
+
+  for (const line of allLines) {
+    const yCtr = line.yCtr ?? 0;
+    // Find an existing row close enough in Y
+    let placed = false;
+    for (const row of rows) {
+      // Use the average Y of items already in this row
+      const rowYAvg =
+        row.reduce((sum, item) => {
+          const matchLine = allLines.find((l) => l.text === item.text && l.xStart === item.xStart);
+          return sum + (matchLine?.yCtr ?? 0);
+        }, 0) / row.length;
+      if (Math.abs(yCtr - rowYAvg) <= Y_TOLERANCE) {
+        row.push({ text: line.text, xStart: line.xStart });
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      rows.push([{ text: line.text, xStart: line.xStart }]);
+    }
+  }
+
+  // Sort rows by their average Y (top to bottom)
+  const rowsWithY = rows.map((row) => {
+    const avgY =
+      row.reduce((sum, item) => {
+        const matchLine = allLines.find((l) => l.text === item.text && l.xStart === item.xStart);
+        return sum + (matchLine?.yCtr ?? 0);
+      }, 0) / row.length;
+    return { row, avgY };
+  });
+  rowsWithY.sort((a, b) => a.avgY - b.avgY);
+
+  // Within each row, sort segments left to right
+  const textLines = rowsWithY.map(({ row }) => {
+    const sorted = [...row].sort((a, b) => a.xStart - b.xStart);
+    return sorted.map((s) => s.text).join('  ');
+  });
+
+  return textLines.join('\n').trim();
+}
+
+function getScanErrorInfo(error: unknown): { message: string; code: string } {
+  if (typeof error === 'string') {
+    return { message: error, code: '' };
+  }
+  if (error instanceof Error) {
+    const codeValue = (error as { code?: unknown }).code;
+    return {
+      message: error.message,
+      code: typeof codeValue === 'string' ? codeValue : '',
+    };
+  }
+  if (error !== null && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const message =
+      typeof record.message === 'string'
+        ? record.message
+        : typeof record.errorMessage === 'string'
+          ? record.errorMessage
+          : '';
+    const code = typeof record.code === 'string' ? record.code : '';
+    return { message, code };
+  }
+  return { message: '', code: '' };
+}
+
+function isCameraCancelledError(error: unknown): boolean {
+  const { message, code } = getScanErrorInfo(error);
+  return (
+    code === 'OS-PLUG-CAMR-0006' ||
+    code === 'OS-PLUG-CAMR-0020' ||
+    code === 'OS-PLUG-CAMR-0013' ||
+    /cancel|dismiss|abort/i.test(message)
+  );
+}
+
+function isCameraPermissionDeniedError(error: unknown): boolean {
+  const { message, code } = getScanErrorInfo(error);
+  return (
+    code === 'OS-PLUG-CAMR-0003' ||
+    code === 'OS-PLUG-CAMR-0005' ||
+    /permission|denied/i.test(message)
+  );
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image blob'));
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const commaIdx = result.indexOf(',');
+      resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -39,6 +229,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [isMounted, setIsMounted] = useState<boolean>(isOpen);
   const [isVisible, setIsVisible] = useState<boolean>(false);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [scanNotice, setScanNotice] = useState<ScanNotice | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -75,6 +267,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    setIsScanning(false);
+    setScanNotice(null);
     if (editingTransaction) {
       setType(editingTransaction.type);
       setAmountInput(formatThousandInput(String(Math.round(editingTransaction.amount))));
@@ -95,6 +289,123 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   }, [editingTransaction, isOpen, categories, initialType]);
 
   if (!isMounted) return null;
+
+  const handleScanReceipt = async () => {
+    if (isScanning) return;
+
+    if (!Capacitor.isNativePlatform()) {
+      setScanNotice({
+        tone: 'info',
+        message: t.txModal.scanNativeOnly,
+      });
+      return;
+    }
+
+    setIsScanning(true);
+    setScanNotice(null);
+    let tempCacheFileName: string | null = null;
+
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Prompt,
+        promptLabelHeader: t.txModal.scanPromptTitle,
+        promptLabelPhoto: t.txModal.scanFromGallery,
+        promptLabelPicture: t.txModal.scanTakePhoto,
+        promptLabelCancel: t.common.cancel,
+      });
+
+      let imagePath = photo.path;
+      if (!imagePath && photo.webPath) {
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+        const base64Data = await blobToBase64(blob);
+        tempCacheFileName = `receipt-ocr-${Date.now()}.jpg`;
+        const saved = await Filesystem.writeFile({
+          path: tempCacheFileName,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        imagePath = saved.uri;
+      }
+
+      if (!imagePath) {
+        setScanNotice({
+          tone: 'error',
+          message: t.txModal.scanError,
+        });
+        return;
+      }
+
+      const ocrResult = await TextRecognition.processImage({
+        path: imagePath,
+        script: Script.Latin,
+      });
+
+      const rawText = extractSpatiallyOrderedText(ocrResult);
+
+      if (!rawText) {
+        setScanNotice({
+          tone: 'info',
+          message: t.txModal.scanNoText,
+        });
+        return;
+      }
+
+      const parsed = parseReceiptText(rawText, categories);
+
+      if (parsed.amount !== undefined && parsed.amount > 0) {
+        setAmountInput(formatThousandInput(String(Math.round(parsed.amount))));
+      }
+      if (parsed.description) {
+        setDescription(parsed.description);
+      }
+      if (parsed.date) {
+        setTransactionDate(parsed.date);
+      }
+      if (parsed.notes) {
+        setNotes(parsed.notes);
+      }
+      if (parsed.categoryId) {
+        const matchedCategory = categories.find((cat) => cat.id === parsed.categoryId);
+        if (matchedCategory) {
+          setType(matchedCategory.type);
+          setCategoryId(matchedCategory.id);
+        }
+      }
+
+      const hasUsefulData = parsed.amount !== undefined || Boolean(parsed.description);
+      setScanNotice({
+        tone: hasUsefulData ? 'success' : 'info',
+        message: hasUsefulData ? t.txModal.scanSuccessReview : t.txModal.scanPartialReview,
+      });
+    } catch (error) {
+      if (isCameraCancelledError(error)) {
+        return;
+      }
+      if (isCameraPermissionDeniedError(error)) {
+        setScanNotice({
+          tone: 'error',
+          message: t.txModal.scanPermissionDenied,
+        });
+        return;
+      }
+      setScanNotice({
+        tone: 'error',
+        message: t.txModal.scanError,
+      });
+    } finally {
+      if (tempCacheFileName) {
+        void Filesystem.deleteFile({
+          path: tempCacheFileName,
+          directory: Directory.Cache,
+        }).catch(() => {});
+      }
+      setIsScanning(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,6 +502,45 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <span>{t.common.income}</span>
           </button>
 
+        </div>
+
+        {/* Receipt OCR Scan Button & Review Banner */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            disabled={isScanning}
+            onClick={() => void handleScanReceipt()}
+            className="w-full min-h-[44px] px-3.5 py-2.5 text-xs font-bold text-[#704BEA] dark:text-[#B8B2FF] bg-[#FAF7F2] dark:bg-[#1E1D27] border border-[#704BEA]/30 dark:border-[#B8B2FF]/30 hover:bg-[#EFEAFE]/70 dark:hover:bg-[#262238] disabled:opacity-60 disabled:cursor-not-allowed rounded-xl transition-colors flex items-center justify-center gap-2 btn-tactile cursor-pointer"
+          >
+            {isScanning ? (
+              <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+            ) : (
+              <CameraIcon className="w-4 h-4 shrink-0" />
+            )}
+            <span>{isScanning ? t.txModal.scanningReceipt : t.txModal.scanReceipt}</span>
+          </button>
+
+          {scanNotice && (
+            <div
+              role="status"
+              className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                scanNotice.tone === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                  : scanNotice.tone === 'info'
+                    ? 'bg-[#FAF7F2] dark:bg-[#1E1D27] border-[#DED6CA] dark:border-[#343146] text-[#5B5670] dark:text-[#C5C0D4]'
+                    : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+              }`}
+            >
+              {scanNotice.tone === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              ) : scanNotice.tone === 'info' ? (
+                <Info className="w-4 h-4 shrink-0 mt-0.5 text-[#704BEA] dark:text-[#B8B2FF]" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+              )}
+              <span className="min-w-0 break-words leading-relaxed">{scanNotice.message}</span>
+            </div>
+          )}
         </div>
 
         {/* Inputs */}

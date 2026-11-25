@@ -6,7 +6,8 @@ import {
   Repeat,
   ChevronDown,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { useLanguage } from '../utils/i18n';
 
@@ -17,6 +18,7 @@ interface HeaderProps {
   toggleTheme: () => void;
   onOpenDataModal: () => void;
   onOpenSecurityModal: () => void;
+  onLockApp: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
   toggleTheme,
   onOpenDataModal,
   onOpenSecurityModal,
+  onLockApp,
 }) => {
   const { lang, setLang, t } = useLanguage();
   const [toolsDropdownOpen, setToolsDropdownOpen] = useState(false);
@@ -43,17 +46,17 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-6">
           
           {/* Zone 1: Single Brand Wordmark in Display Typography */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setCurrentTab('dashboard')}
-              className="flex items-center gap-2 sm:gap-2.5 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#704BEA] rounded-xl sm:rounded-2xl btn-tactile cursor-pointer"
+              className="flex items-center gap-2 sm:gap-2.5 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#704BEA] rounded-xl sm:rounded-2xl btn-tactile cursor-pointer min-w-0 max-w-full"
               aria-label="Financial Tracker"
             >
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-[#704BEA] to-[#8A66F5] text-white flex items-center justify-center font-black text-xs tracking-wider shadow-sm transition-transform group-hover:scale-105 shrink-0">
                 FT
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-sm sm:text-base font-extrabold tracking-tight text-[#181522] dark:text-white leading-tight truncate">
+                <span className="text-[13px] sm:text-base font-extrabold tracking-tight text-[#181522] dark:text-white leading-tight truncate">
                   Financial Tracker
                 </span>
                 <span className="hidden sm:inline text-[10px] text-[#726B82] dark:text-[#A7A0B8] font-semibold tracking-wide">
@@ -84,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
           </nav>
 
           {/* Zone 3: Functional Controls & Compact Language Switcher */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
             
             {/* Compact Language Switcher (ID / EN) */}
             <div
@@ -100,7 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
                     type="button"
                     onClick={() => setLang(code)}
                     aria-pressed={isSelected}
-                    className={`min-h-[36px] sm:min-h-[38px] px-2 sm:px-2.5 text-[11px] font-bold uppercase rounded-lg sm:rounded-xl transition-colors cursor-pointer ${
+                    className={`min-h-[36px] sm:min-h-[38px] px-1.5 sm:px-2.5 text-[11px] font-bold uppercase rounded-lg sm:rounded-xl transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-[#121019] text-white dark:bg-[#B8B0FF] dark:text-[#121019] shadow-xs'
                         : 'text-[#6D657C] dark:text-[#A7A0B8] hover:text-[#181522] dark:hover:text-white'
@@ -189,6 +192,20 @@ export const Header: React.FC<HeaderProps> = ({
               className="min-h-[36px] min-w-[36px] sm:min-h-[38px] sm:min-w-[38px] p-1.5 sm:p-2 rounded-xl sm:rounded-2xl text-[#6D657C] dark:text-[#A7A0B8] hover:text-[#181522] dark:hover:text-white border border-[#E5DDD0] dark:border-[#2E283F] bg-white dark:bg-[#1A1726] btn-tactile cursor-pointer flex items-center justify-center"
             >
               {isDark ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-[#544F63]" />}
+            </button>
+
+            {/* Compact Lock App Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setToolsDropdownOpen(false);
+                onLockApp();
+              }}
+              aria-label={t.header.lockApp}
+              title={t.header.lockApp}
+              className="min-h-[36px] min-w-[36px] sm:min-h-[38px] sm:min-w-[38px] p-1.5 sm:p-2 rounded-xl sm:rounded-2xl text-[#6D657C] dark:text-[#A7A0B8] hover:text-[#704BEA] dark:hover:text-[#B8B0FF] border border-[#E5DDD0] dark:border-[#2E283F] bg-white dark:bg-[#1A1726] btn-tactile cursor-pointer flex items-center justify-center"
+            >
+              <Lock className="w-3.5 h-3.5" />
             </button>
 
           </div>

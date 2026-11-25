@@ -17,6 +17,7 @@ import {
   Sliders,
   ReceiptText,
   BarChart3,
+  BookOpen,
 } from 'lucide-react';
 import { OrganicDivider } from './OrganicDivider';
 import { DashboardSkeleton } from './Skeleton';
@@ -43,6 +44,7 @@ interface DashboardViewProps {
   onNavigateTab: (tab: string) => void;
   onSelectTransaction: (tx: Transaction) => void;
   onOpenNewTx: (type?: 'INCOME' | 'EXPENSE') => void;
+  onOpenCashBook?: () => void;
   isLoading?: boolean;
   onRefresh?: () => void;
 }
@@ -57,6 +59,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
   onSelectTransaction,
   onOpenNewTx,
+  onOpenCashBook,
   isLoading = false,
   onRefresh,
 }) => {
@@ -219,10 +222,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Top Editorial Greeting & Period Switcher */}
       <section className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 pb-2 border-b border-[#EDE7DE] dark:border-[#262234]">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#704BEA] dark:text-[#B8B0FF] mb-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#704BEA] dark:text-[#B8B0FF] mb-1">
             <span>{t.dashboard.eyebrowLeft}</span>
             <span aria-hidden="true">·</span>
-            <span>{t.dashboard.eyebrowRight}</span>
+            <button
+              type="button"
+              onClick={onOpenCashBook}
+              title={t.dashboard.openCashBookTitle}
+              aria-label={t.dashboard.openCashBookTitle}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 min-h-[28px] rounded-lg bg-[#704BEA]/10 dark:bg-[#B8B0FF]/15 hover:bg-[#704BEA]/20 dark:hover:bg-[#B8B0FF]/25 text-[#704BEA] dark:text-[#B8B0FF] transition-colors cursor-pointer btn-tactile focus:outline-none focus-visible:ring-2 focus-visible:ring-[#704BEA]"
+            >
+              <BookOpen className="w-3 h-3 shrink-0" />
+              <span>{t.dashboard.eyebrowRight}</span>
+            </button>
           </div>
           {/* Treats inspired editorial greeting headline */}
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-[#181522] dark:text-white">
