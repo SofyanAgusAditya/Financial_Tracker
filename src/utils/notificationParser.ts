@@ -466,36 +466,6 @@ function resolveCategoryId(
 }
 
 /**
- * Generates realistic outgoing and incoming Bank Jago sample notifications
- * so users can test Auto-Record parsing and SQLite persistence directly in the app.
- */
-export function createBankJagoTestNotifications(
-  now: number = Date.now()
-): RawFinanceNotification[] {
-  return [
-    {
-      id: `test-jago-out-${now}`,
-      packageName: 'com.jago.digitalBanking',
-      appName: 'Bank Jago',
-      title: 'Transaksi Bank Jago',
-      text: 'Kamu mengirim Rp50.000 ke Budi dari Kantong Utama. Sisa saldo Rp1.450.000',
-      bigText: 'Kamu mengirim Rp50.000 ke Budi dari Kantong Utama. Sisa saldo Rp1.450.000',
-      timestamp: now,
-    },
-    {
-      id: `test-jago-in-${now}`,
-      packageName: 'com.jago.digitalBanking',
-      appName: 'Bank Jago',
-      title: 'Uang Masuk Bank Jago',
-      text: 'Kamu menerima Rp125.000,00 dari Andi ke Kantong Utama. Saldo saat ini Rp1.575.000',
-      bigText:
-        'Kamu menerima Rp125.000,00 dari Andi ke Kantong Utama. Saldo saat ini Rp1.575.000',
-      timestamp: now + 1000,
-    },
-  ];
-}
-
-/**
  * Parses a captured Android E-Wallet/Bank notification into a structured transaction.
  * Returns null if the notification is promotional, lacks a valid Rupiah amount,
  * or has an unclear transaction direction.

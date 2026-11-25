@@ -18,7 +18,7 @@ import {
   INITIAL_CATEGORIES,
   formatCurrency,
 } from './data/mockData';
-import { BookOpen, CheckCircle2, Trash2 } from 'lucide-react';
+import { BookOpen, CheckCircle2, Info, Trash2 } from 'lucide-react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { TransactionsView } from './components/TransactionsView';
@@ -28,10 +28,18 @@ import { RecurringView } from './components/RecurringView';
 import { TransactionModal } from './components/TransactionModal';
 import { OfflineSyncModal } from './components/OfflineSyncModal';
 import { CashBookModal } from './components/CashBookModal';
+import { UpdateModal } from './components/UpdateModal';
 import { LockScreen, SecuritySettingsModal } from './components/LockScreen';
 import { AndroidBottomNav } from './components/AndroidBottomNav';
 import { useTabSeo } from './utils/seo';
 import { PeriodFilter } from './utils/finance';
+import {
+  APP_VERSION,
+  ReleaseUpdateInfo,
+  UpdateCheckResult,
+  checkForAppUpdate,
+  openReleaseUrl,
+} from './utils/updateChecker';
 import {
   AppStateSnapshot,
   loadAppState,
@@ -60,13 +68,12 @@ import {
   saveAutoRecordEnabled,
 } from './utils/notificationBridge';
 import {
-  createBankJagoTestNotifications,
   loadProcessedNotificationIds,
   markNotificationIdsProcessed,
   parseBankNotification,
 } from './utils/notificationParser';
 
-type ToastTone = 'income' | 'expense' | 'info' | 'delete';
+type ToastTone = 'income' | 'expense' | 'info' | 'warning' | 'delete';
 
 interface ToastState {
   id: number;
@@ -129,7 +136,11 @@ export default function App() {
     }, 250);
   };
 
-  const showToast = (message: string, tone: ToastTone = 'info') => {
+  const showToast = (
+    message: string,
+    tone: ToastTone = 'info',
+    durationMs: number = 2500
+  ) => {
     if (toastTimerRef.current !== null) {
       window.clearTimeout(toastTimerRef.current);
     }
@@ -137,7 +148,7 @@ export default function App() {
     toastTimerRef.current = window.setTimeout(() => {
       setToast(null);
       toastTimerRef.current = null;
-    }, 2500);
+    }, durationMs);
   };
 
   useEffect(() => {
@@ -256,6 +267,9 @@ export default function App() {
   const [txModalType, setTxModalType] = useState<TransactionType>('EXPENSE');
   const [showDataModal, setShowDataModal] = useState<boolean>(false);
   const [showCashBookModal, setShowCashBookModal] = useState<boolean>(false);
+  const [availableUpdate, setAvailableUpdate] = useState<ReleaseUpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+  const hasCheckedUpdateSessionRef = useRef<boolean>(false);
 
   // Android hardware/gesture back button handling
   const lastBackPressRef = useRef<number>(0);
@@ -266,6 +280,7 @@ export default function App() {
   const backStateRef = useRef({
     isUnlocked,
     isChangingPin,
+    showUpdateModal,
     showTxModal,
     showDataModal,
     showCashBookModal,
@@ -275,6 +290,7 @@ export default function App() {
   backStateRef.current = {
     isUnlocked,
     isChangingPin,
+    showUpdateModal,
     showTxModal,
     showDataModal,
     showCashBookModal,
@@ -298,6 +314,11 @@ export default function App() {
       }
 
       // 2. Jika ada modal terbuka -> tutup modal tersebut
+      if (state.showUpdateModal) {
+        lastBackPressRef.current = 0;
+        setShowUpdateModal(false);
+        return;
+      }
       if (state.showTxModal) {
         lastBackPressRef.current = 0;
         setShowTxModal(false);
@@ -519,9 +540,6 @@ export default function App() {
       }
     };
   }, [isHydrated, isUnlocked, autoRecordEnabled]);
-
-  const handleTestBankJagoNotifications = (): number =>
-    ingestBankNotifications(createBankJagoTestNotifications(), { force: true });
 
   const openNewTransaction = (type: TransactionType = 'EXPENSE') => {
     if (isUnlockTransitioningRef.current) return;
@@ -759,6 +777,7 @@ export default function App() {
     setShowDataModal(false);
     setShowSecurityModal(false);
     setShowCashBookModal(false);
+    setShowUpdateModal(false);
     setIsChangingPin(false);
     setCurrentTab('dashboard');
     setIsUnlocked(false);
@@ -773,6 +792,52 @@ export default function App() {
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [isUnlocked, isChangingPin]);
+
+  useEffect(() => {
+    if (
+      !isUnlocked ||
+      isChangingPin ||
+      isUnlockTransitioning ||
+      currentTab !== 'dashboard' ||
+      hasCheckedUpdateSessionRef.current
+    ) {
+      return;
+    }
+
+    hasCheckedUpdateSessionRef.current = true;
+    let cancelled = false;
+
+    void checkForAppUpdate(APP_VERSION)
+      .then((result) => {
+        if (cancelled || !isUnlockedRef.current) return;
+        if (result.status === 'update_available') {
+          setAvailableUpdate(result.release);
+          setShowUpdateModal(true);
+        }
+      })
+      .catch(() => {
+        // Silent fail for offline-first resilience.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isUnlocked, isChangingPin, isUnlockTransitioning, currentTab]);
+
+  const handleManualCheckUpdate = async (): Promise<UpdateCheckResult> => {
+    const result = await checkForAppUpdate(APP_VERSION);
+    if (result.status === 'update_available') {
+      showToast(t.backupModal.updateAvailableFound(result.release.version), 'income', 3500);
+      setShowDataModal(false);
+      setAvailableUpdate(result.release);
+      setShowUpdateModal(true);
+    } else if (result.status === 'up_to_date') {
+      showToast(t.backupModal.updateUpToDate(result.currentVersion), 'income', 3500);
+    } else {
+      showToast(t.backupModal.updateCheckUnavailable, 'warning', 3500);
+    }
+    return result;
+  };
 
   if (!isUnlocked) {
     return (
@@ -831,13 +896,17 @@ export default function App() {
                 ? 'bg-emerald-950/95 text-emerald-50 border-emerald-500/40'
                 : toast.tone === 'expense'
                   ? 'bg-[#181522]/95 text-white border-[#704BEA]/50'
-                  : toast.tone === 'delete'
-                    ? 'bg-rose-950/95 text-rose-50 border-rose-500/40'
-                    : 'bg-[#181522]/95 text-white border-white/15'
+                  : toast.tone === 'warning'
+                    ? 'bg-amber-950/95 text-amber-50 border-amber-500/40'
+                    : toast.tone === 'delete'
+                      ? 'bg-rose-950/95 text-rose-50 border-rose-500/40'
+                      : 'bg-[#181522]/95 text-white border-white/15'
             }`}
           >
             {toast.tone === 'delete' ? (
               <Trash2 className="w-4 h-4 shrink-0 text-rose-400" />
+            ) : toast.tone === 'warning' ? (
+              <Info className="w-4 h-4 shrink-0 text-amber-400" />
             ) : (
               <CheckCircle2
                 className={`w-4 h-4 shrink-0 ${
@@ -978,7 +1047,7 @@ export default function App() {
         autoRecordEnabled={autoRecordEnabled}
         onToggleAutoRecord={handleToggleAutoRecord}
         onSyncPendingNotifications={syncPendingNotifications}
-        onTestBankJagoNotifications={handleTestBankJagoNotifications}
+        onCheckForUpdate={handleManualCheckUpdate}
       />
 
       {/* Local Rupiah Cash Book Modal */}
@@ -1001,6 +1070,18 @@ export default function App() {
           setIsChangingPin(true);
         }}
         onLockNow={handleLockApp}
+      />
+
+      {/* In-App Update Notification Modal */}
+      <UpdateModal
+        isOpen={showUpdateModal}
+        release={availableUpdate}
+        currentVersion={APP_VERSION}
+        onClose={() => setShowUpdateModal(false)}
+        onUpdateNow={(release) => {
+          openReleaseUrl(release);
+          setShowUpdateModal(false);
+        }}
       />
 
     </div>

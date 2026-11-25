@@ -428,9 +428,10 @@ const idTranslations = {
     schedules: 'Jadwal',
     activeCategories: (count: number) => `${count} kategori aktif`,
     currencyLabel: 'Mata uang:',
-    exportBtn: 'Export Backup (JSON)',
-    exportingBtn: 'Menyiapkan Cadangan...',
-    restoreBtn: 'Restore Backup (JSON)',
+    backupCardTitle: 'Cadangan Data (JSON)',
+    exportBtn: 'Export JSON',
+    exportingBtn: 'Menyiapkan...',
+    restoreBtn: 'Restore JSON',
     clearBtn: 'Kosongkan Data (Mulai dari 0)',
     clearConfirmText:
       'Semua transaksi, anggaran, dan jadwal berulang akan dihapus permanen dari penyimpanan lokal. Kategori bawaan tetap dipertahankan.',
@@ -450,10 +451,9 @@ const idTranslations = {
     notifTitle: 'Auto-Catat Notifikasi E-Wallet & Bank',
     notifSubtitle: 'Tangkap otomatis transaksi Bank Jago, DANA, GoPay, OVO, SeaBank, BCA, BRImo, Mandiri & lainnya',
     notifSupportedLabel: 'Didukung:',
-    notifTestJagoBtn: 'Tes Notifikasi Bank Jago',
-    notifTestJagoSuccess: (count: number) =>
-      `Simulasi ${count} notifikasi Bank Jago (masuk & keluar) berhasil dicatat ke buku kas.`,
-    notifTestJagoError: 'Gagal menjalankan simulasi notifikasi Bank Jago.',
+    notifSupportedCompact: 'Bank Jago, DANA, GoPay, BCA, Mandiri & 11 lainnya',
+    notifShowAllApps: 'Lihat semua',
+    notifHideAllApps: 'Sembunyikan',
     notifStatusActive: 'Aktif',
     notifStatusInactive: 'Belum Aktif',
     notifAndroidOnly: 'Android',
@@ -461,7 +461,7 @@ const idTranslations = {
     notifToggleHint: 'Otomatis menyimpan transaksi masuk/keluar saat notifikasi diterima',
     notifAndroidOnlyHint:
       'Hanya tersedia di aplikasi Android melalui layanan Akses Notifikasi perangkat.',
-    notifOpenSettingsBtn: 'Buka Izin Notifikasi',
+    notifOpenSettingsBtn: 'Buka Izin',
     notifCheckStatusBtn: 'Cek Status',
     notifCheckingBtn: 'Memeriksa...',
     notifPermissionActiveFeedback:
@@ -469,6 +469,15 @@ const idTranslations = {
     notifPermissionInactiveFeedback:
       'Akses notifikasi belum aktif. Aktifkan "Financial Tracker Auto-Record" di Pengaturan Android.',
     notifOpenSettingsError: 'Gagal membuka Pengaturan Akses Notifikasi perangkat.',
+    checkUpdateTitle: 'Pembaruan Aplikasi',
+    checkUpdateVersion: (version: string) => `Versi v${version}`,
+    checkUpdateBtn: 'Cek Pembaruan',
+    checkingUpdateBtn: 'Memeriksa...',
+    updateUpToDate: (version: string) =>
+      `Aplikasi sudah menggunakan versi terbaru (v${version})`,
+    updateAvailableFound: (version: string) => `Pembaruan v${version} tersedia!`,
+    updateCheckUnavailable:
+      'Pengecekan pembaruan membutuhkan koneksi internet. Coba lagi saat online.',
   },
   lockScreen: {
     localSecurity: 'Keamanan Lokal',
@@ -571,6 +580,18 @@ const idTranslations = {
     summaryMonthCount: (count: number) => `Transaksi Bulan Ini: ${count} transaksi`,
     summaryOverallBalance: (amount: string, totalCount: number) =>
       `Saldo Kas Keseluruhan: ${amount} (Total ${totalCount} transaksi)`,
+  },
+  updateModal: {
+    title: 'Pembaruan Tersedia',
+    subtitle: 'Versi terbaru Financial Tracker tersedia di GitHub Releases',
+    closeAria: 'Tutup pemberitahuan pembaruan',
+    versionLabel: 'Versi Baru',
+    releaseNotesTitle: 'Catatan Pembaruan',
+    noReleaseNotes:
+      'Peningkatan performa, perbaikan bug, dan penyempurnaan pengalaman pengguna.',
+    updateNowBtn: 'Update Sekarang',
+    laterBtn: 'Nanti Saja',
+    publishedPrefix: (date: string) => `Dirilis ${date}`,
   },
 };
 
@@ -870,9 +891,10 @@ const enTranslations: TranslationDictionary = {
     schedules: 'Schedules',
     activeCategories: (count: number) => `${count} active categories`,
     currencyLabel: 'Currency:',
-    exportBtn: 'Export Backup (JSON)',
-    exportingBtn: 'Preparing Backup...',
-    restoreBtn: 'Restore Backup (JSON)',
+    backupCardTitle: 'Data Backup (JSON)',
+    exportBtn: 'Export JSON',
+    exportingBtn: 'Preparing...',
+    restoreBtn: 'Restore JSON',
     clearBtn: 'Clear Data (Start Fresh)',
     clearConfirmText:
       'All transactions, budgets, and recurring schedules will be permanently deleted from local storage. Default categories will remain intact.',
@@ -892,10 +914,9 @@ const enTranslations: TranslationDictionary = {
     notifTitle: 'Auto-Record E-Wallet & Bank Notifications',
     notifSubtitle: 'Automatically capture Bank Jago, DANA, GoPay, OVO, SeaBank, BCA, BRImo, Mandiri & more',
     notifSupportedLabel: 'Supported:',
-    notifTestJagoBtn: 'Test Bank Jago Notification',
-    notifTestJagoSuccess: (count: number) =>
-      `Simulated ${count} Bank Jago notifications (income & expense) recorded to ledger.`,
-    notifTestJagoError: 'Failed to run Bank Jago notification simulation.',
+    notifSupportedCompact: 'Bank Jago, DANA, GoPay, BCA, Mandiri & 11 more',
+    notifShowAllApps: 'Show all',
+    notifHideAllApps: 'Hide',
     notifStatusActive: 'Active',
     notifStatusInactive: 'Not Active',
     notifAndroidOnly: 'Android',
@@ -903,7 +924,7 @@ const enTranslations: TranslationDictionary = {
     notifToggleHint: 'Automatically save incoming/outgoing transactions when notifications arrive',
     notifAndroidOnlyHint:
       'Only available on the Android app via device Notification Access settings.',
-    notifOpenSettingsBtn: 'Open Notification Access',
+    notifOpenSettingsBtn: 'Open Access',
     notifCheckStatusBtn: 'Check Status',
     notifCheckingBtn: 'Checking...',
     notifPermissionActiveFeedback:
@@ -911,6 +932,15 @@ const enTranslations: TranslationDictionary = {
     notifPermissionInactiveFeedback:
       'Notification access is not active yet. Enable "Financial Tracker Auto-Record" in Android Settings.',
     notifOpenSettingsError: 'Failed to open device Notification Access settings.',
+    checkUpdateTitle: 'App Updates',
+    checkUpdateVersion: (version: string) => `Version v${version}`,
+    checkUpdateBtn: 'Check for Updates',
+    checkingUpdateBtn: 'Checking...',
+    updateUpToDate: (version: string) =>
+      `App is already up to date (v${version})`,
+    updateAvailableFound: (version: string) => `Update v${version} is available!`,
+    updateCheckUnavailable:
+      'Checking for updates requires an internet connection. Please try again when online.',
   },
   lockScreen: {
     localSecurity: 'Local Security',
@@ -1013,6 +1043,18 @@ const enTranslations: TranslationDictionary = {
       `This Month Entries: ${count} ${count === 1 ? 'transaction' : 'transactions'}`,
     summaryOverallBalance: (amount: string, totalCount: number) =>
       `Overall Cash Balance: ${amount} (Total ${totalCount} ${totalCount === 1 ? 'transaction' : 'transactions'})`,
+  },
+  updateModal: {
+    title: 'Update Available',
+    subtitle: 'A new Financial Tracker release is available on GitHub Releases',
+    closeAria: 'Close update notification',
+    versionLabel: 'New Version',
+    releaseNotesTitle: 'Release Notes',
+    noReleaseNotes:
+      'Performance improvements, bug fixes, and user experience refinements.',
+    updateNowBtn: 'Update Now',
+    laterBtn: 'Later',
+    publishedPrefix: (date: string) => `Released ${date}`,
   },
 };
 
